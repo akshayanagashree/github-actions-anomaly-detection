@@ -1,0 +1,282 @@
+name: CI
+true:
+  push:
+    branches:
+    - main
+    tags:
+    - 2[0-9].[0-3]
+    - 2[0-9].[0-3].[0-9]+
+  pull_request: null
+  schedule:
+  - cron: 0 0 * * MON
+  workflow_dispatch: null
+env:
+  FORCE_COLOR: '1'
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha
+    }}
+  cancel-in-progress: true
+jobs:
+  docs:
+    name: docs
+    runs-on:
+    - custom-ephemeral-pool
+    - x64
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version: 3.x
+    - run: python -m pip install .
+    - run: python -m pip install nox
+    - run: python -m nox -s docs
+  determine-changes:
+    runs-on:
+    - custom-ephemeral-pool
+    - x64
+    outputs:
+      tests: ${{ steps.filter.outputs.tests }}
+      vendoring: ${{ steps.filter.outputs.vendoring }}
+    steps:
+    - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
+      id: filter
+      with:
+        filters: "vendoring:\n  # Anything that's touching \"vendored code\"\n  -\
+          \ \"src/pip/_vendor/**\"\n  - \"pyproject.toml\"\n  - \"noxfile.py\"\ntests:\n\
+          \  # Anything that's touching code-related stuff\n  - \".github/workflows/ci.yml\"\
+          \n  - \"src/**\"\n  - \"tests/**\"\n  - \"noxfile.py\"\n  # Holds the pytest\
+          \ configuration and the test dependency groups.\n  - \"pyproject.toml\"\n\
+          \  # The test suite should also run when cutting a release\n  # (which is\
+          \ the only time this file is modified).\n  - \"NEWS.rst\"\n"
+      if: github.event_name == 'pull_request'
+  packaging:
+    name: packaging / ${{ matrix.os }}
+    runs-on:
+    - custom-ephemeral-pool
+    - x64
+    strategy:
+      matrix:
+        os:
+        - ubuntu-latest
+        - windows-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version: 3.x
+    - name: Set up git credentials
+      run: 'git config --global user.email "pypa-dev@googlegroups.com"
+
+        git config --global user.name "pip"
+
+        '
+    - run: python -m pip install .
+    - run: python -m pip install nox
+    - run: python -m nox -s prepare-release -- 99.9
+    - run: python -m nox -s build-release -- 99.9
+    - run: pipx run check-sdist
+  vendoring:
+    name: vendoring
+    runs-on:
+    - custom-ephemeral-pool
+    - x64
+    needs:
+    - determine-changes
+    if: needs.determine-changes.outputs.vendoring == 'true' || github.event_name !=
+      'pull_request'
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version: 3.x
+    - run: python -m pip install .
+    - run: python -m pip install nox
+    - run: python -m nox -s vendoring
+    - run: git diff --exit-code
+  tests-unix:
+    name: tests / ${{ matrix.python.version || matrix.python }} / ${{ matrix.os }}
+    runs-on:
+    - custom-ephemeral-pool
+    - x64
+    needs:
+    - determine-changes
+    if: needs.determine-changes.outputs.tests == 'true' || github.event_name != 'pull_request'
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+        - ubuntu-latest
+        - macos-latest
+        python:
+        - '3.10'
+        - '3.11'
+        - '3.12'
+        - '3.13'
+        - '3.14'
+        - '3.15'
+        - 3.14t
+        include:
+        - os: ubuntu-24.04
+          python:
+            key: '3.10'
+            version: 3.10.4
+        - os: ubuntu-24.04
+          python:
+            key: '3.11'
+            version: 3.11.0
+        - os: ubuntu-24.04
+          python:
+            key: '3.12'
+            version: 3.12.0
+        - os: ubuntu-24.04
+          python:
+            key: '3.13'
+            version: 3.13.0
+        - os: ubuntu-24.04
+          python:
+            key: '3.14'
+            version: 3.14.0
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version: ${{ matrix.python.version || matrix.python }}
+        allow-prereleases: true
+    - name: Set PYTHON_GIL
+      if: endsWith(matrix.python.version || matrix.python, 't')
+      run: 'echo "PYTHON_GIL=0" >> "$GITHUB_ENV"
+
+        '
+    - name: Install Ubuntu dependencies
+      if: runner.os == 'Linux'
+      run: 'sudo apt-get update
+
+        sudo apt-get install brz subversion
+
+        '
+    - name: Install MacOS dependencies
+      if: runner.os == 'macOS'
+      run: "DEPS=breezy\nif ! which svn; then\n  DEPS=\"${DEPS} subversion\"\nfi\n\
+        brew install ${DEPS}\n"
+    - run: python -m pip install .
+    - run: python -m pip install nox
+    - name: Run unit tests
+      run: python -m nox -s test-${{ matrix.python.key || matrix.python }} -- tests/unit
+        --verbose --numprocesses auto --showlocals
+    - name: Run integration tests
+      run: python -m nox -s test-${{ matrix.python.key || matrix.python }} --no-install
+        -- tests/functional --verbose --numprocesses auto --showlocals --durations=15
+  tests-windows:
+    name: tests / ${{ matrix.python }} / ${{ matrix.os }} / ${{ matrix.group }}
+    runs-on:
+    - custom-ephemeral-pool
+    - x64
+    needs:
+    - determine-changes
+    if: needs.determine-changes.outputs.tests == 'true' || github.event_name != 'pull_request'
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+        - Windows
+        python:
+        - '3.10'
+        - '3.14'
+        - '3.15'
+        - 3.14t
+        group:
+        - 1
+        - 2
+        - 3
+    steps:
+    - name: Set TEMP to D:/Temp
+      run: 'mkdir "D:\\Temp"
+
+        echo "TEMP=D:\\Temp" >> $env:GITHUB_ENV
+
+        '
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version: ${{ matrix.python }}
+        allow-prereleases: true
+    - name: Set PYTHON_GIL
+      if: endsWith(matrix.python, 't')
+      run: 'echo "PYTHON_GIL=0" >> "$GITHUB_ENV"
+
+        '
+    - name: Install Subversion
+      shell: pwsh
+      run: "for ($i = 1; $i -le 3; $i++) {\n  winget source reset --force\n  winget\
+        \ source update winget\n  winget install --source winget --accept-source-agreements\
+        \ --accept-package-agreements -e --id Slik.Subversion\n  if ($LASTEXITCODE\
+        \ -eq 0) { break }\n  if ($i -eq 3) { exit $LASTEXITCODE }\n  Start-Sleep\
+        \ -Seconds (10 * $i)\n}\necho \"C:\\Program Files\\SlikSvn\\bin\" | Out-File\
+        \ -FilePath $env:GITHUB_PATH -Encoding utf8 -Append\n"
+    - run: python -m pip install .
+    - run: python -m pip install nox
+    - name: Run tests (shard ${{ matrix.group }} of 3)
+      run: python -m nox -s test-${{ matrix.python }} -- tests/unit tests/functional
+        --num-test-groups 3 --test-group ${{ matrix.group }} --verbose --numprocesses
+        auto --showlocals --durations=15 --dist worksteal
+  tests-zipapp:
+    name: tests / zipapp
+    runs-on:
+    - custom-ephemeral-pool
+    - x64
+    needs:
+    - determine-changes
+    if: needs.determine-changes.outputs.tests == 'true' || github.event_name != 'pull_request'
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version: '3.11'
+    - name: Install Ubuntu dependencies
+      run: 'sudo apt-get update
+
+        sudo apt-get install brz subversion
+
+        '
+    - run: python -m pip install .
+    - run: python -m pip install nox
+    - name: Run integration tests
+      run: python -m nox -s test-3.11 -- tests/functional --verbose --numprocesses
+        auto --showlocals --durations=15 --use-zipapp
+  check:
+    if: always()
+    needs:
+    - determine-changes
+    - docs
+    - packaging
+    - tests-unix
+    - tests-windows
+    - tests-zipapp
+    - vendoring
+    runs-on:
+    - custom-ephemeral-pool
+    - x64
+    steps:
+    - name: Decide whether the needed jobs succeeded or failed
+      uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35
+      with:
+        allowed-skips: "${{\n  (\n    needs.determine-changes.outputs.vendoring !=\
+          \ 'true'\n    && github.event_name == 'pull_request'\n  )\n  && 'vendoring'\n\
+          \  || ''\n}} , ${{\n  (\n    needs.determine-changes.outputs.tests != 'true'\n\
+          \    && github.event_name == 'pull_request'\n  )\n  && '\n    tests-unix,\n\
+          \    tests-windows,\n    tests-zipapp,\n  '\n  || ''\n}}"
+        jobs: ${{ toJSON(needs) }}

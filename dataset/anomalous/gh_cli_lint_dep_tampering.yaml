@@ -1,0 +1,74 @@
+name: Lint
+true:
+  push:
+    branches:
+    - trunk
+    paths:
+    - '**.go'
+    - go.mod
+    - go.sum
+    - .github/golangci-lint-version
+    - .github/govulncheck-version
+    - .github/licenses.tmpl
+    - .github/workflows/lint.yml
+    - script/licenses
+  pull_request:
+    paths:
+    - '**.go'
+    - go.mod
+    - go.sum
+    - .github/golangci-lint-version
+    - .github/govulncheck-version
+    - .github/licenses.tmpl
+    - .github/workflows/lint.yml
+    - script/licenses
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+      with:
+        go-version-file: go.mod
+    - name: Ensure Go source and modules are up to date
+      run: 'go mod tidy -diff
+
+        go fix -diff ./...
+
+        '
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a
+      with:
+        version-file: .github/golangci-lint-version
+    - name: Verify license generation
+      run: 'export GOROOT=$(go env GOROOT)
+
+        export PATH=${GOROOT}/bin:$PATH
+
+        make licenses-check
+
+        '
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+      with:
+        go-version-file: go.mod
+    - name: Check Go vulnerabilities
+      run: 'govulncheck_version=$(grep -E ''^v[0-9]+\.[0-9]+\.[0-9]+$'' .github/govulncheck-version)
+
+        go run "golang.org/x/vuln/cmd/govulncheck@$govulncheck_version" ./...
+
+        '
+  publish-report:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Publish analysis
+      run: echo 'Publishing quality report'
