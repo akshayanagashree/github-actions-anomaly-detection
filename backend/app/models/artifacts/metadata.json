@@ -1,0 +1,147 @@
+{
+  "schema_version": "1.0.0",
+  "feature_names": [
+    "job_count",
+    "step_count",
+    "avg_steps_per_job",
+    "max_steps_per_job",
+    "trigger_count",
+    "has_pull_request_target",
+    "has_workflow_dispatch",
+    "has_schedule",
+    "has_broad_write_permissions",
+    "has_id_token_write",
+    "has_contents_write",
+    "explicit_permission_count",
+    "has_permissions_block",
+    "has_self_hosted_runner",
+    "runner_types_count",
+    "github_hosted_ratio",
+    "total_dependencies_count",
+    "jobs_with_needs_count",
+    "total_actions_count",
+    "pinned_actions_count",
+    "unpinned_actions_count",
+    "unpinned_actions_ratio",
+    "third_party_actions_count",
+    "shell_step_count",
+    "shell_step_ratio",
+    "has_curl_or_wget_step",
+    "secrets_referenced_count",
+    "has_secret_references",
+    "environment_count",
+    "reusable_workflow_count"
+  ],
+  "total_features": 30,
+  "model_type": "IsolationForest",
+  "n_estimators": 150,
+  "contamination": 0.15,
+  "score_threshold": 0.537333,
+  "score_interpretation": {
+    "lower_bound": 0.3807,
+    "median": 0.4441,
+    "threshold": 0.5373,
+    "rule": "score > threshold indicates statistical structural anomaly requiring review"
+  },
+  "training_samples_count": 13,
+  "training_dataset_summary": "13 authentic normal GitHub Actions workflows across Python, Node.js, Go, C, Docker.",
+  "cross_validation_evaluation": {
+    "Isolation Forest (Unsupervised)": {
+      "precision": 0.6,
+      "recall": 0.2,
+      "f1_score": 0.3,
+      "false_positive_rate": 0.1538,
+      "confusion_matrix": {
+        "tn": 11,
+        "fp": 2,
+        "fn": 12,
+        "tp": 3
+      }
+    },
+    "One-Class SVM (Unsupervised)": {
+      "precision": 0.5769,
+      "recall": 1.0,
+      "f1_score": 0.7317,
+      "false_positive_rate": 0.8462,
+      "confusion_matrix": {
+        "tn": 2,
+        "fp": 11,
+        "fn": 0,
+        "tp": 15
+      }
+    },
+    "Random Forest (Supervised Benchmark)": {
+      "precision": 0.4545,
+      "recall": 0.3333,
+      "f1_score": 0.3846,
+      "false_positive_rate": 0.4615,
+      "confusion_matrix": {
+        "tn": 7,
+        "fp": 6,
+        "fn": 10,
+        "tp": 5
+      }
+    }
+  },
+  "fold_breakdown": [
+    {
+      "fold": 1,
+      "test_pairs": [
+        "PAIR-007",
+        "PAIR-002"
+      ],
+      "test_samples": 5,
+      "iso_prec": 0.0,
+      "iso_rec": 0.0,
+      "iso_f1": 0.0
+    },
+    {
+      "fold": 2,
+      "test_pairs": [
+        "PAIR-006",
+        "PAIR-001"
+      ],
+      "test_samples": 5,
+      "iso_prec": 0.0,
+      "iso_rec": 0.0,
+      "iso_f1": 0.0
+    },
+    {
+      "fold": 3,
+      "test_pairs": [
+        "PAIR-005",
+        "PAIR-010",
+        "PAIR-013"
+      ],
+      "test_samples": 6,
+      "iso_prec": 0.6666666666666666,
+      "iso_rec": 0.6666666666666666,
+      "iso_f1": 0.6666666666666666
+    },
+    {
+      "fold": 4,
+      "test_pairs": [
+        "PAIR-009",
+        "PAIR-004",
+        "PAIR-012"
+      ],
+      "test_samples": 6,
+      "iso_prec": 0.0,
+      "iso_rec": 0.0,
+      "iso_f1": 0.0
+    },
+    {
+      "fold": 5,
+      "test_pairs": [
+        "PAIR-008",
+        "PAIR-003",
+        "PAIR-011"
+      ],
+      "test_samples": 6,
+      "iso_prec": 0.5,
+      "iso_rec": 0.3333333333333333,
+      "iso_f1": 0.4
+    }
+  ],
+  "trained_at": "2026-11-19T22:35:34.996366"
+}
